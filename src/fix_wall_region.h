@@ -86,6 +86,7 @@ class FixWallRegion : public Fix {
   void lj126(double);
   void colloid(double, double);
   void harmonic(double);
+  void edl(double, double);
 };
 
 }
