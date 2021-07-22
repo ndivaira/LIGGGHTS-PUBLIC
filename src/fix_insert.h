@@ -153,6 +153,9 @@ class FixInsert : public Fix {
   // if flag is 0, particles centers are in region
   int all_in_flag;
 
+  // the growth ratio which will be applied to particle radius when checking if particle is in region
+  double growth_ratio;
+
   int maxattempt;
 
   // positions generated, and for overlap check

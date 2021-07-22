@@ -437,7 +437,7 @@ void FixInsertPack::x_v_omega(int ninsert_this_local,int &ninserted_this_local, 
             if(screen && print_stats_during_flag && (ninsert_this_local >= 10) && (0 == itotal % (ninsert_this_local/10)))
                 fprintf(screen,"insertion: proc %d at %d %%\n",comm->me,10*itotal/(ninsert_this_local/10));
 
-            if(all_in_flag) ins_region->generate_random_shrinkby_cut(pos,rbound,true);
+            if(all_in_flag) ins_region->generate_random_shrinkby_cut(pos,rbound * growth_ratio,true);
             else ins_region->generate_random(pos,true);
 
             // randomize vel, omega, quat here
@@ -477,7 +477,7 @@ void FixInsertPack::x_v_omega(int ninsert_this_local,int &ninserted_this_local, 
                 do
                 {
                     
-                    if(all_in_flag) ins_region->generate_random_shrinkby_cut(pos,rbound,true);
+                    if(all_in_flag) ins_region->generate_random_shrinkby_cut(pos,rbound * growth_ratio,true);
                     else ins_region->generate_random(pos,true);
                     ntry++;
 
