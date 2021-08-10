@@ -42,7 +42,7 @@ class PairColloid : public Pair {
   enum {SMALL_SMALL,SMALL_LARGE,LARGE_LARGE};
 
   double cut_global;
-  double **cut;
+  double **cut,**cut_inner;
   double **a12,**d1,**d2,**diameter,**a1,**a2,**offset;
   double **sigma,**sigma3,**sigma6;
   double **lj1,**lj2,**lj3,**lj4;

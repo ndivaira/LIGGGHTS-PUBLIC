@@ -53,6 +53,7 @@ PairColloid::~PairColloid()
     memory->destroy(a2);
     memory->destroy(diameter);
     memory->destroy(cut);
+    memory->destroy(cut_inner);
     memory->destroy(offset);
     memory->destroy(sigma3);
     memory->destroy(sigma6);
@@ -148,6 +149,8 @@ void PairColloid::compute(int eflag, int vflag)
         r = sqrt(rsq);
         c1 = a1[itype][jtype];
         c2 = a2[itype][jtype];
+        if (r <= c1+c2+cut_inner[itype][jtype]) // ND: additional two lines for inner force cutoff
+          r = c1+c2+cut_inner[itype][jtype]; // ND
         K[0] = c1*c2;
         K[1] = c1+c2;
         K[2] = c1-c2;
@@ -179,7 +182,7 @@ void PairColloid::compute(int eflag, int vflag)
         if (eflag)
           evdwl += a12[itype][jtype]/6.0 *
             (2.0*K[0]*(K[7]+K[8])-log(K[8]/K[7])) - offset[itype][jtype];
-        if (r <= K[1]) error->one(FLERR,"Overlapping large/large in pair colloid");
+        //if (r <= K[1]) error->one(FLERR,"Overlapping large/large in pair colloid");
         break;
       }
 
@@ -227,6 +230,7 @@ void PairColloid::allocate()
   memory->create(a2,n+1,n+1,"pair:a2");
   memory->create(diameter,n+1,n+1,"pair:diameter");
   memory->create(cut,n+1,n+1,"pair:cut");
+  memory->create(cut_inner,n+1,n+1,"pair:cut_inner");
   memory->create(offset,n+1,n+1,"pair:offset");
   memory->create(sigma3,n+1,n+1,"pair:sigma3");
   memory->create(sigma6,n+1,n+1,"pair:sigma6");
@@ -274,9 +278,10 @@ void PairColloid::coeff(int narg, char **arg)
   double sigma_one = force->numeric(FLERR,arg[3]);
   double d1_one = force->numeric(FLERR,arg[4]);
   double d2_one = force->numeric(FLERR,arg[5]);
+  double cut_inner_one = force->numeric(FLERR,arg[6]);  // ND: new variable for inner cutoff distance
 
   double cut_one = cut_global;
-  if (narg == 7) cut_one = force->numeric(FLERR,arg[6]);
+  //if (narg == 7) cut_one = force->numeric(FLERR,arg[6]);  ND
 
   if (d1_one < 0.0 || d2_one < 0.0)
     error->all(FLERR,"Invalid d1 or d2 value for pair colloid coeff");
@@ -292,6 +297,7 @@ void PairColloid::coeff(int narg, char **arg)
       d2[i][j] = d2_one;
       diameter[i][j] = 0.5*(d1_one+d2_one);
       cut[i][j] = cut_one;
+      cut_inner[i][j] = cut_inner_one; // ND
       setflag[i][j] = 1;
       count++;
     }
@@ -313,6 +319,7 @@ double PairColloid::init_one(int i, int j)
     d2[i][j] = mix_distance(d2[i][i],d2[j][j]);
     diameter[i][j] = 0.5 * (d1[i][j] + d2[i][j]);
     cut[i][j] = mix_distance(cut[i][i],cut[j][j]);
+    cut_inner[i][j] = mix_distance(cut_inner[i][i],cut_inner[j][j]);
   }
 
   sigma3[i][j] = sigma[i][j]*sigma[i][j]*sigma[i][j];
@@ -376,6 +383,7 @@ void PairColloid::write_restart(FILE *fp)
         fwrite(&d1[i][j],sizeof(double),1,fp);
         fwrite(&d2[i][j],sizeof(double),1,fp);
         fwrite(&cut[i][j],sizeof(double),1,fp);
+        fwrite(&cut_inner[i][j],sizeof(double),1,fp);
       }
     }
 }
@@ -402,12 +410,14 @@ void PairColloid::read_restart(FILE *fp)
           fread(&d1[i][j],sizeof(double),1,fp);
           fread(&d2[i][j],sizeof(double),1,fp);
           fread(&cut[i][j],sizeof(double),1,fp);
+          fread(&cut_inner[i][j],sizeof(double),1,fp);
         }
         MPI_Bcast(&a12[i][j],1,MPI_DOUBLE,0,world);
         MPI_Bcast(&sigma[i][j],1,MPI_DOUBLE,0,world);
         MPI_Bcast(&d1[i][j],1,MPI_DOUBLE,0,world);
         MPI_Bcast(&d2[i][j],1,MPI_DOUBLE,0,world);
         MPI_Bcast(&cut[i][j],1,MPI_DOUBLE,0,world);
+        MPI_Bcast(&cut_inner[i][j],1,MPI_DOUBLE,0,world);
       }
     }
 }
@@ -481,6 +491,8 @@ double PairColloid::single(int i, int j, int itype, int jtype, double rsq,
     r = sqrt(rsq);
     c1 = a1[itype][jtype];
     c2 = a2[itype][jtype];
+    if (r <= c1+c2+cut_inner[itype][jtype]) // ND: additional two lines for inner force cutoff
+      r = c1+c2+cut_inner[itype][jtype]; // ND
     K[0] = c1*c2;
     K[1] = c1+c2;
     K[2] = c1-c2;
