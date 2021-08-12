@@ -72,7 +72,7 @@ class FixWallRegion : public Fix {
 
  private:
   int style,iregion;
-  double epsilon,sigma,cutoff;
+  double epsilon,sigma,cutoff,cutoff_inner;
   int eflag;
   double ewall[4],ewall_all[4];
   int nlevels_respa;

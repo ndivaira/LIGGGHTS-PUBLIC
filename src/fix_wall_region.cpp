@@ -68,7 +68,7 @@ enum{LJ93,LJ126,COLLOID,HARMONIC,EDL};
 FixWallRegion::FixWallRegion(LAMMPS *lmp, int narg, char **arg) :
   Fix(lmp, narg, arg)
 {
-  if (narg != 8) error->all(FLERR,"Illegal fix wall/region command");
+  if (narg != 9) error->all(FLERR,"Illegal fix wall/region command");
 
   scalar_flag = 1;
   vector_flag = 1;
@@ -96,6 +96,7 @@ FixWallRegion::FixWallRegion(LAMMPS *lmp, int narg, char **arg) :
   epsilon = force->numeric(FLERR,arg[5]);
   sigma = force->numeric(FLERR,arg[6]);
   cutoff = force->numeric(FLERR,arg[7]);
+  cutoff_inner = force->numeric(FLERR,arg[8]);
 
   if (cutoff <= 0.0) error->all(FLERR,"Fix wall/region cutoff <= 0.0");
 
@@ -263,16 +264,26 @@ void FixWallRegion::post_force(int vflag)
       n = region->surface(x[i][0],x[i][1],x[i][2],cutoff);
 
       for (m = 0; m < n; m++) {
-        if (region->contact[m].r <= tooclose) {
-          onflag = 1;
-          continue;
-        } else rinv = 1.0/region->contact[m].r;
+        //if (region->contact[m].r <= tooclose) {  ND: Remove this error handler so that particle can overlap wall
+        //  onflag = 1;
+        //  continue;
+        //} else rinv = 1.0/region->contact[m].r;
 
-        if (style == LJ93) lj93(region->contact[m].r);
-        else if (style == LJ126) lj126(region->contact[m].r);
-        else if (style == COLLOID) colloid(region->contact[m].r,radius[i]);
-        else if (style == EDL) edl(region->contact[m].r,radius[i]);
-        else harmonic(region->contact[m].r);
+        if (region->contact[m].r <= cutoff_inner) { // ND: added in calculation if within inner cutoff
+          if (style == LJ93) lj93(cutoff_inner);
+          else if (style == LJ126) lj126(cutoff_inner);
+          else if (style == COLLOID) colloid(cutoff_inner,radius[i]);
+          else if (style == EDL) edl(cutoff_inner,radius[i]);
+          else harmonic(cutoff_inner);
+        } else {
+          if (style == LJ93) lj93(region->contact[m].r);
+          else if (style == LJ126) lj126(region->contact[m].r);
+          else if (style == COLLOID) colloid(region->contact[m].r,radius[i]);
+          else if (style == EDL) edl(region->contact[m].r,radius[i]);
+          else harmonic(region->contact[m].r);
+        }
+        
+        rinv = 1.0/region->contact[m].r;
 
         ewall[0] += eng;
         fx = fwall * region->contact[m].delx * rinv;
