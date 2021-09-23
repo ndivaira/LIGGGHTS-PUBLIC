@@ -433,8 +433,8 @@ void FixWallRegion::edl(double r, double rad)
   double kappa = sigma;
   double a = epsilon;
 
-  fwall = a/2*exp(-kappa*(r-rad)); 
+  fwall = 2*a*exp(-kappa*(r-rad)); 
 
-  eng = a/2/sigma*exp(-kappa*(r-rad)); 
+  eng = 2*a/sigma*exp(-kappa*(r-rad)); 
 }
 
