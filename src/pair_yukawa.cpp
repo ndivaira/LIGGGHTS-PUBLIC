@@ -35,6 +35,7 @@ PairYukawa::~PairYukawa()
 
     memory->destroy(rad);
     memory->destroy(cut);
+    memory->destroy(cut_inner); // ND: added extra argument
     memory->destroy(a);
     memory->destroy(offset);
   }
@@ -137,6 +138,7 @@ void PairYukawa::allocate()
 
   memory->create(rad,n+1,"pair:rad");
   memory->create(cut,n+1,n+1,"pair:cut");
+  memory->create(cut_inner,n+1,n+1,"pair:cut_inner"); // ND: added extra argument
   memory->create(a,n+1,n+1,"pair:a");
   memory->create(offset,n+1,n+1,"pair:offset");
 }
@@ -168,7 +170,7 @@ void PairYukawa::settings(int narg, char **arg)
 
 void PairYukawa::coeff(int narg, char **arg)
 {
-  if (narg < 3 || narg > 4)
+  if (narg < 4 || narg > 5) // ND: modified for extra cutof_inner argument
     error->all(FLERR,"Incorrect args for pair coefficients");
   if (!allocated) allocate();
 
@@ -179,12 +181,15 @@ void PairYukawa::coeff(int narg, char **arg)
   double a_one = force->numeric(FLERR,arg[2]);
 
   double cut_one = cut_global;
-  if (narg == 4) cut_one = force->numeric(FLERR,arg[3]);
+  double cut_inner_one = 0.0; // ND: added extra argument
+  if (narg == 4) cut_inner_one = force->numeric(FLERR,arg[3]); // ND: added extra argument
+  if (narg == 5) cut_one = force->numeric(FLERR,arg[4]);
 
   int count = 0;
   for (int i = ilo; i <= ihi; i++) {
     for (int j = MAX(jlo,i); j <= jhi; j++) {
       a[i][j] = a_one;
+      cut_inner[i][j] = cut_inner_one; // ND: added extra argument
       cut[i][j] = cut_one;
       setflag[i][j] = 1;
       count++;

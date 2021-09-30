@@ -70,7 +70,7 @@ void PairColloid::compute(int eflag, int vflag)
 {
   int i,j,ii,jj,inum,jnum,itype,jtype;
   double xtmp,ytmp,ztmp,delx,dely,delz,evdwl,fpair;
-  double rsq,r,forcelj,factor_lj;
+  double rsq,r,forcelj,factor_lj,rhold;
   double r2inv,r6inv,c1,c2,fR,dUR,dUA;
   double K[9],h[4],g[4];
   int *ilist,*jlist,*numneigh,**firstneigh;
@@ -147,42 +147,47 @@ void PairColloid::compute(int eflag, int vflag)
 
       case LARGE_LARGE:
         r = sqrt(rsq);
+        rhold = r; // ND: placeholder variable
         c1 = a1[itype][jtype];
         c2 = a2[itype][jtype];
-        if (r <= c1+c2+cut_inner[itype][jtype]) // ND: additional two lines for inner force cutoff
-          r = c1+c2+cut_inner[itype][jtype]; // ND
-        K[0] = c1*c2;
-        K[1] = c1+c2;
-        K[2] = c1-c2;
-        K[3] = K[1]+r;
-        K[4] = K[1]-r;
-        K[5] = K[2]+r;
-        K[6] = K[2]-r;
-        K[7] = 1.0/(K[3]*K[4]);
-        K[8] = 1.0/(K[5]*K[6]);
-        g[0] = powint(K[3],-7);
-        g[1] = powint(K[4],-7);
-        g[2] = powint(K[5],-7);
-        g[3] = powint(K[6],-7);
-        h[0] = ((K[3]+5.0*K[1])*K[3]+30.0*K[0])*g[0];
-        h[1] = ((K[4]+5.0*K[1])*K[4]+30.0*K[0])*g[1];
-        h[2] = ((K[5]+5.0*K[2])*K[5]-30.0*K[0])*g[2];
-        h[3] = ((K[6]+5.0*K[2])*K[6]-30.0*K[0])*g[3];
-        g[0] *= 42.0*K[0]/K[3]+6.0*K[1]+K[3];
-        g[1] *= 42.0*K[0]/K[4]+6.0*K[1]+K[4];
-        g[2] *= -42.0*K[0]/K[5]+6.0*K[2]+K[5];
-        g[3] *= -42.0*K[0]/K[6]+6.0*K[2]+K[6];
+        if (r <= c1+c2) fpair = 0.0; // ND: if separation <=0, set force=0
+        else { // ND: otherwise all calculations in a conditional statment
+          if (r <= c1+c2+cut_inner[itype][jtype]) r = c1+c2+cut_inner[itype][jtype]; // ND: if separation less than inner cutoff, set separation as inner cutoff
+          K[0] = c1*c2;
+          K[1] = c1+c2;
+          K[2] = c1-c2;
+          K[3] = K[1]+r;
+          K[4] = K[1]-r;
+          K[5] = K[2]+r;
+          K[6] = K[2]-r;
+          K[7] = 1.0/(K[3]*K[4]);
+          K[8] = 1.0/(K[5]*K[6]);
+          g[0] = powint(K[3],-7);
+          g[1] = powint(K[4],-7);
+          g[2] = powint(K[5],-7);
+          g[3] = powint(K[6],-7);
+          h[0] = ((K[3]+5.0*K[1])*K[3]+30.0*K[0])*g[0];
+          h[1] = ((K[4]+5.0*K[1])*K[4]+30.0*K[0])*g[1];
+          h[2] = ((K[5]+5.0*K[2])*K[5]-30.0*K[0])*g[2];
+          h[3] = ((K[6]+5.0*K[2])*K[6]-30.0*K[0])*g[3];
+          g[0] *= 42.0*K[0]/K[3]+6.0*K[1]+K[3];
+          g[1] *= 42.0*K[0]/K[4]+6.0*K[1]+K[4];
+          g[2] *= -42.0*K[0]/K[5]+6.0*K[2]+K[5];
+          g[3] *= -42.0*K[0]/K[6]+6.0*K[2]+K[6];
 
-        fR = a12[itype][jtype]*sigma6[itype][jtype]/r/37800.0;
-        evdwl = fR * (h[0]-h[1]-h[2]+h[3]);
-        dUR = evdwl/r + 5.0*fR*(g[0]+g[1]-g[2]-g[3]);
-        dUA = -a12[itype][jtype]/3.0*r*((2.0*K[0]*K[7]+1.0)*K[7] +
-                                        (2.0*K[0]*K[8]-1.0)*K[8]);
-        fpair = factor_lj * (dUR+dUA)/r;
-        if (eflag)
-          evdwl += a12[itype][jtype]/6.0 *
-            (2.0*K[0]*(K[7]+K[8])-log(K[8]/K[7])) - offset[itype][jtype];
-        //if (r <= K[1]) error->one(FLERR,"Overlapping large/large in pair colloid");
+          fR = a12[itype][jtype]*sigma6[itype][jtype]/r/37800.0;
+          evdwl = fR * (h[0]-h[1]-h[2]+h[3]);
+          dUR = evdwl/r + 5.0*fR*(g[0]+g[1]-g[2]-g[3]);
+          dUA = -a12[itype][jtype]/3.0*r*((2.0*K[0]*K[7]+1.0)*K[7] +
+                                      (2.0*K[0]*K[8]-1.0)*K[8]);
+          fpair = factor_lj * (dUR+dUA)/r;
+          if (eflag)
+            evdwl += a12[itype][jtype]/6.0 *
+              (2.0*K[0]*(K[7]+K[8])-log(K[8]/K[7])) - offset[itype][jtype];
+          // if (r <= K[1]) { // ND: remove overlap error
+              // error->one(FLERR,"Overlapping large/large in pair colloid"); 
+          if (rhold <= K[1] + cut_inner[itype][jtype]) fpair = fpair*(rhold - K[1])/(cut_inner[itype][jtype]); // ND: linear interpolation to separation=0
+        }
         break;
       }
 
@@ -457,7 +462,7 @@ double PairColloid::single(int i, int j, int itype, int jtype, double rsq,
                            double &fforce)
 {
   double K[9],h[4],g[4];
-  double r,r2inv,r6inv,forcelj,c1,c2,phi,fR,dUR,dUA;
+  double r,r2inv,r6inv,forcelj,c1,c2,phi,fR,dUR,dUA,rhold;
 
   switch (form[itype][jtype]) {
   case SMALL_SMALL:
@@ -491,8 +496,6 @@ double PairColloid::single(int i, int j, int itype, int jtype, double rsq,
     r = sqrt(rsq);
     c1 = a1[itype][jtype];
     c2 = a2[itype][jtype];
-    if (r <= c1+c2+cut_inner[itype][jtype]) // ND: additional two lines for inner force cutoff
-      r = c1+c2+cut_inner[itype][jtype]; // ND
     K[0] = c1*c2;
     K[1] = c1+c2;
     K[2] = c1-c2;

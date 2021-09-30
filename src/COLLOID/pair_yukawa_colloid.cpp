@@ -39,7 +39,7 @@ void PairYukawaColloid::compute(int eflag, int vflag)
 {
   int i,j,ii,jj,inum,jnum,itype,jtype;
   double xtmp,ytmp,ztmp,delx,dely,delz,evdwl,fpair,radi,radj;
-  double rsq,r2inv,r,rinv,screening,forceyukawa,factor;
+  double rsq,r2inv,r,rinv,screening,forceyukawa,factor,rhold; // ND: added extra rhold variable
   int *ilist,*jlist,*numneigh,**firstneigh;
 
   evdwl = 0.0;
@@ -86,11 +86,17 @@ void PairYukawaColloid::compute(int eflag, int vflag)
       if (rsq < cutsq[itype][jtype]) {
         r2inv = 1.0/rsq;
         r = sqrt(rsq);
+        rhold = r; // ND: placeholder variable
         rinv = 1.0/r;
-        screening = exp(-kappa*(r-(radi+radj)));
-        forceyukawa = a[itype][jtype] * screening;
+        if (r <= radi+radj) fpair = 0.0;// ND: if separation <=0, set force=0
+        else { // ND: otherwise all calculations in a conditional statment
+          if (r <= radi+radj+cut_inner[itype][jtype]) r = radi+radj+cut_inner[itype][jtype]; // ND: if separation less than inner cutoff, set separation as inner cutoff
+          screening = exp(-kappa*(r-(radi+radj)));
+          forceyukawa = a[itype][jtype] * screening;
 
-        fpair = factor*forceyukawa * rinv;
+          fpair = factor*forceyukawa * rinv;
+          if (rhold <= radi+radj+cut_inner[itype][jtype]) fpair = fpair*(rhold - (radi+radj))/(cut_inner[itype][jtype]); // ND: linear interpolation to separation=0
+        }
 
         f[i][0] += delx*fpair;
         f[i][1] += dely*fpair;

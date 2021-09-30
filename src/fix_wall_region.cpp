@@ -233,7 +233,7 @@ void FixWallRegion::min_setup(int vflag)
 void FixWallRegion::post_force(int vflag)
 {
   int i,m,n;
-  double rinv,fx,fy,fz,tooclose;
+  double rinv,fx,fy,fz; //tooclose;
 
   eflag = 0;
   ewall[0] = ewall[1] = ewall[2] = ewall[3] = 0.0;
@@ -257,9 +257,9 @@ void FixWallRegion::post_force(int vflag)
         onflag = 1;
         continue;
       }
-      if (style == COLLOID) tooclose = radius[i];
-      if (style == EDL) tooclose= radius[i];
-      else tooclose = 0.0;
+      // if (style == COLLOID) tooclose = radius[i]; // ND: tooclose is now an unused variable
+      // if (style == EDL) tooclose= radius[i];
+      // else tooclose = 0.0;
 
       n = region->surface(x[i][0],x[i][1],x[i][2],cutoff);
 
@@ -269,12 +269,17 @@ void FixWallRegion::post_force(int vflag)
         //  continue;
         //} else rinv = 1.0/region->contact[m].r;
 
-        if (region->contact[m].r <= cutoff_inner) { // ND: added in calculation if within inner cutoff
+        // ND: following conditionals added to linearly ramp force to 0 after cutoff_inner  
+        if (region->contact[m].r <= radius[i]) {
+          fwall = 0;
+        } else if (region->contact[m].r <= cutoff_inner) { 
           if (style == LJ93) lj93(cutoff_inner);
           else if (style == LJ126) lj126(cutoff_inner);
           else if (style == COLLOID) colloid(cutoff_inner,radius[i]);
           else if (style == EDL) edl(cutoff_inner,radius[i]);
           else harmonic(cutoff_inner);
+          
+          fwall = fwall*(region->contact[m].r - radius[i])/(cutoff_inner - radius[i]); // ND: linear interpolation to separation=0
         } else {
           if (style == LJ93) lj93(region->contact[m].r);
           else if (style == LJ126) lj126(region->contact[m].r);
