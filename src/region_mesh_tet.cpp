@@ -369,8 +369,14 @@ void RegTetMesh::build_neighs()
             rbound_max = rb;
 
     }
+    double extent[3], rOverlap = 0;
+    bounding_box_mesh.getExtent(extent);
+    rOverlap = extent[0];
+    rOverlap = std::min(rOverlap, extent[1]);
+    rOverlap = std::min(rOverlap, extent[2]);
+    rOverlap = rOverlap / 50;
 
-    neighList.setBoundingBox(bounding_box_mesh, rbound_max);
+    neighList.setBoundingBox(bounding_box_mesh, rOverlap);
 
     for(int i = 0; i < nTet; i++)
     {
@@ -383,8 +389,11 @@ void RegTetMesh::build_neighs()
     for(int i = 0; i < nTet; i++)
     {
         std::vector<int> overlaps;
-        neighList.hasOverlapWith(center[i], rbound[i],overlaps);
-
+        for(int iNode = 0; iNode < 4; iNode++) neighList.hasOverlapWith(node[i][iNode], rOverlap*0.2, overlaps);
+        
+        std::sort(overlaps.begin(), overlaps.end());
+        overlaps.erase(std::unique(overlaps.begin(), overlaps.end()), overlaps.end());
+        
         for(size_t icontainer = 0; icontainer < overlaps.size(); icontainer++)
         {
             int iOverlap = overlaps[icontainer];
@@ -457,14 +466,16 @@ void RegTetMesh::build_neighs()
             }
         }
 
-        neighList.insert(center[i], rbound[i],i);
+        for(int iNode = 0; iNode < 4; iNode++) neighList.insert(node[i][iNode], rOverlap*0.2,i);
     }
     if (badMesh)
         error->warningAll(FLERR,"Region mesh/tet: too many node neighbors, mesh is of bad quality; 'all_in yes' might not work correctly");
 
+    neighList.reset();
+    neighList.setBoundingBox(bounding_box_mesh, rbound_max);
     for(int i = 0; i < nTet; i++)
     {
-        
+        neighList.insert(center[i], rbound[i],i);
     }
 }
 
