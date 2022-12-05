@@ -187,6 +187,11 @@ FixInsert::FixInsert(LAMMPS *lmp, int narg, char **arg) :
       else error->fix_error(FLERR,this,"");
       iarg += 2;
       hasargs = true;
+    } else if (strcmp(arg[iarg],"growth_ratio") == 0) {
+      if (iarg+2 > narg) error->fix_error(FLERR,this,"");
+      growth_ratio = atof(arg[iarg+1]);
+      iarg += 2;
+      hasargs = true;
     } else if (strcmp(arg[iarg],"set_property") == 0) {
       if (iarg+3 > narg) error->fix_error(FLERR,this,"");
       int n = strlen(arg[iarg+1]) + 1;
@@ -410,6 +415,7 @@ void FixInsert::init_defaults()
 
   check_ol_flag = 1;
   all_in_flag = 0;
+  growth_ratio = 1;
 
   exact_number = 1;
 
