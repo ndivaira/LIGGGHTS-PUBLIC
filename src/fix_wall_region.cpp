@@ -61,14 +61,14 @@
 using namespace LAMMPS_NS;
 using namespace FixConst;
 
-enum{LJ93,LJ126,COLLOID,HARMONIC};
+enum{LJ93,LJ126,COLLOID,HARMONIC,EDL};
 
 /* ---------------------------------------------------------------------- */
 
 FixWallRegion::FixWallRegion(LAMMPS *lmp, int narg, char **arg) :
   Fix(lmp, narg, arg)
 {
-  if (narg != 8) error->all(FLERR,"Illegal fix wall/region command");
+  if (narg != 9) error->all(FLERR,"Illegal fix wall/region command");
 
   scalar_flag = 1;
   vector_flag = 1;
@@ -90,11 +90,13 @@ FixWallRegion::FixWallRegion(LAMMPS *lmp, int narg, char **arg) :
   else if (strcmp(arg[4],"lj126") == 0) style = LJ126;
   else if (strcmp(arg[4],"colloid") == 0) style = COLLOID;
   else if (strcmp(arg[4],"harmonic") == 0) style = HARMONIC;
+  else if (strcmp(arg[4],"edl") == 0) style = EDL;
   else error->all(FLERR,"Illegal fix wall/region command");
 
   epsilon = force->numeric(FLERR,arg[5]);
   sigma = force->numeric(FLERR,arg[6]);
   cutoff = force->numeric(FLERR,arg[7]);
+  cutoff_inner = force->numeric(FLERR,arg[8]);
 
   if (cutoff <= 0.0) error->all(FLERR,"Fix wall/region cutoff <= 0.0");
 
@@ -152,6 +154,25 @@ void FixWallRegion::init()
     if (flagall)
       error->all(FLERR,"Fix wall/region colloid requires extended particles");
   }
+  
+  if (style == EDL) {
+    if (!atom->sphere_flag)
+      error->all(FLERR,"Fix wall/region edl requires atom style sphere");
+
+    double *radius = atom->radius;
+    int *mask = atom->mask;
+    int nlocal = atom->nlocal;
+
+    int flag = 0;
+    for (int i = 0; i < nlocal; i++)
+      if (mask[i] & groupbit)
+        if (radius[i] == 0.0) flag = 1;
+
+    int flagall;
+    MPI_Allreduce(&flag,&flagall,1,MPI_INT,MPI_SUM,world);
+    if (flagall)
+      error->all(FLERR,"Fix wall/region edl requires extended particles");
+  }
 
   // setup coefficients for each style
 
@@ -181,7 +202,7 @@ void FixWallRegion::init()
     double r2inv = rinv*rinv;
     double r4inv = r2inv*r2inv;
     offset = coeff3*r4inv*r4inv*rinv - coeff4*r2inv*rinv;
-  }
+  } 
 
   if (strstr(update->integrate_style,"respa"))
     nlevels_respa = ((Respa *) update->integrate)->nlevels;
@@ -212,7 +233,7 @@ void FixWallRegion::min_setup(int vflag)
 void FixWallRegion::post_force(int vflag)
 {
   int i,m,n;
-  double rinv,fx,fy,fz,tooclose;
+  double rinv,fx,fy,fz; //tooclose;
 
   eflag = 0;
   ewall[0] = ewall[1] = ewall[2] = ewall[3] = 0.0;
@@ -236,21 +257,38 @@ void FixWallRegion::post_force(int vflag)
         onflag = 1;
         continue;
       }
-      if (style == COLLOID) tooclose = radius[i];
-      else tooclose = 0.0;
+      // if (style == COLLOID) tooclose = radius[i]; // ND: tooclose is now an unused variable
+      // if (style == EDL) tooclose= radius[i];
+      // else tooclose = 0.0;
 
       n = region->surface(x[i][0],x[i][1],x[i][2],cutoff);
 
       for (m = 0; m < n; m++) {
-        if (region->contact[m].r <= tooclose) {
-          onflag = 1;
-          continue;
-        } else rinv = 1.0/region->contact[m].r;
+        //if (region->contact[m].r <= tooclose) {  ND: Remove this error handler so that particle can overlap wall
+        //  onflag = 1;
+        //  continue;
+        //} else rinv = 1.0/region->contact[m].r;
 
-        if (style == LJ93) lj93(region->contact[m].r);
-        else if (style == LJ126) lj126(region->contact[m].r);
-        else if (style == COLLOID) colloid(region->contact[m].r,radius[i]);
-        else harmonic(region->contact[m].r);
+        // ND: following conditionals added to linearly ramp force to 0 after cutoff_inner  
+        if (region->contact[m].r <= radius[i]) {
+          fwall = 0;
+        } else if (region->contact[m].r <= cutoff_inner) { 
+          if (style == LJ93) lj93(cutoff_inner);
+          else if (style == LJ126) lj126(cutoff_inner);
+          else if (style == COLLOID) colloid(cutoff_inner,radius[i]);
+          else if (style == EDL) edl(cutoff_inner,radius[i]);
+          else harmonic(cutoff_inner);
+          
+          fwall = fwall*(region->contact[m].r - radius[i])/(cutoff_inner - radius[i]); // ND: linear interpolation to separation=0
+        } else {
+          if (style == LJ93) lj93(region->contact[m].r);
+          else if (style == LJ126) lj126(region->contact[m].r);
+          else if (style == COLLOID) colloid(region->contact[m].r,radius[i]);
+          else if (style == EDL) edl(region->contact[m].r,radius[i]);
+          else harmonic(region->contact[m].r);
+        }
+        
+        rinv = 1.0/region->contact[m].r;
 
         ewall[0] += eng;
         fx = fwall * region->contact[m].delx * rinv;
@@ -389,3 +427,19 @@ void FixWallRegion::harmonic(double r)
   fwall = 2.0*epsilon*dr;
   eng = epsilon*dr*dr;
 }
+
+/* ----------------------------------------------------------------------
+   edl interaction for finite-size particle of rad with wall
+   compute eng and fwall = magnitude of wall force
+------------------------------------------------------------------------- */
+
+void FixWallRegion::edl(double r, double rad)
+{
+  double kappa = sigma;
+  double a = epsilon;
+
+  fwall = 2*a*exp(-kappa*(r-rad)); 
+
+  eng = 2*a/sigma*exp(-kappa*(r-rad)); 
+}
+

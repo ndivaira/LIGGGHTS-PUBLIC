@@ -87,6 +87,8 @@
 #include <vtkRectilinearGrid.h>
 #include <vtkHexahedron.h>
 #include <vtkUnstructuredGrid.h>
+#include <vtkMPI.h>
+#include <vtkMPICommunicator.h>
 #include <vtkMPIController.h>
 #include <vtkMPI.h>
 #include <vtkMPICommunicator.h>
